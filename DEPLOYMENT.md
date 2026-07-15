@@ -1,8 +1,21 @@
 # TÀI LIỆU TRIỂN KHAI HỆ THỐNG GIÁM SÁT IoT
 
 **Phiên bản:** 1.0  
-**Ngày ban hành:** 14/07/2026  
+**Ngày ban hành:** 15/07/2026  
 **Phân loại:** Tài liệu kỹ thuật — Nội bộ
+
+---
+
+## Kiến trúc kho mã nguồn
+
+Hệ thống được tổ chức thành **2 kho mã nguồn riêng biệt**:
+
+| Kho | URL | Nội dung |
+|---|---|---|
+| **docker_thuydien** | `github.com/pcthuoc/docker_thuydien` | Hạ tầng Docker (repo này) |
+| **thuydien** | `github.com/pcthuoc/thuydien` | Mã nguồn ứng dụng web (submodule) |
+
+Thư mục `repo/` bên trong `docker_thuydien` là **git submodule** trỏ về `thuydien`.
 
 ---
 
@@ -30,10 +43,10 @@
 
 Cần chuẩn bị **2 bản ghi DNS** trỏ về IP máy chủ:
 
-| Bản ghi | Giá trị | Mục đích |
-|---|---|---|
-| `domain.com` | `<IP máy chủ>` | Ứng dụng chính |
-| `hub.domain.com` | `<IP máy chủ>` | Giao diện quản trị Docker |
+| Bản ghi | Mục đích |
+|---|---|
+| `domain.com` | Ứng dụng chính |
+| `hub.domain.com` | Giao diện quản trị Docker (Portainer) |
 
 ---
 
@@ -46,100 +59,100 @@ Thực hiện trên máy chủ với quyền `root`:
 curl -fsSL https://get.docker.com | sh
 systemctl enable docker && systemctl start docker
 
-# 2. Cài Docker Compose và các công cụ hỗ trợ
-apt-get update && apt-get install -y docker-compose-plugin git unzip
+# 2. Cài Docker Compose, Git và các công cụ hỗ trợ
+apt-get update && apt-get install -y docker-compose-plugin git
 
 # 3. Kiểm tra
-docker compose version
+docker compose version && git --version
 ```
 
 ---
 
 ## III. TRIỂN KHAI HỆ THỐNG
 
-### 3.1 Tải mã nguồn
+### 3.1 Tải mã nguồn (bao gồm submodule)
 
-**Từ file ZIP (bàn giao):**
 ```bash
 cd /root
-unzip iot-monitor.zip -d docker
+
+# Clone kho Docker kèm theo submodule web app
+git clone --recurse-submodules git@github.com:pcthuoc/docker_thuydien.git docker
+
 cd docker
 ```
 
-**Từ kho mã nguồn Git:**
-```bash
-git clone git@github.com:pcthuoc/thuydien.git docker
-cd docker
-git checkout dev/sensor-report
-```
+> Nếu đã clone mà chưa có submodule:
+> ```bash
+> git submodule update --init --recursive
+> ```
 
-Cấu trúc thư mục sau khi giải nén:
+Cấu trúc thư mục sau khi clone:
+
 ```
 docker/
 ├── docker-compose.yml
 ├── DEPLOYMENT.md
+├── .gitmodules                ← khai báo submodule
 ├── environment/
-│   ├── site.env          ← cấu hình ứng dụng & domain
-│   ├── mysql.env         ← thông tin kết nối CSDL
-│   └── mysql-admin.env   ← mật khẩu CSDL
-├── nginx/conf.d/
-│   └── nginx.conf        ← cấu hình Nginx & domain
+│   ├── site.env.example       ← mẫu cấu hình (sao chép và điền thông tin)
+│   ├── mysql.env.example
+│   └── mysql-admin.env.example
+├── nginx/conf.d/nginx.conf
 ├── base/Dockerfile
 ├── site/Dockerfile
 ├── mqtt_service/Dockerfile
-├── mqtt/config/          ← cấu hình MQTT broker
-├── repo/                 ← mã nguồn ứng dụng
-└── media/                ← file media (firmware, ảnh...)
+├── mqtt/config/
+├── scripts/
+└── repo/                      ← submodule: mã nguồn web app
 ```
 
-### 3.2 Cấu hình tên miền và bảo mật
+### 3.2 Tạo file cấu hình từ template
 
-**Bước 1 — Cập nhật `nginx/conf.d/nginx.conf`:**
+```bash
+cd /root/docker/environment
 
-Tìm và thay thế tên miền mẫu bằng tên miền thực tế tại 2 vị trí:
-```nginx
-server {
-    server_name ten-domain-moi.com;        # ← ứng dụng chính
-}
-
-server {
-    server_name hub.ten-domain-moi.com;    # ← quản trị Docker
-}
+cp site.env.example        site.env
+cp mysql.env.example       mysql.env
+cp mysql-admin.env.example mysql-admin.env
 ```
 
-**Bước 2 — Cập nhật `environment/site.env`:**
-```env
-HOST=ten-domain-moi.com
-CSRF_TRUSTED_ORIGINS=https://ten-domain-moi.com
+### 3.3 Điền thông tin cấu hình
 
-# Bắt buộc thay thế trước khi vận hành thực tế:
-SECRET_KEY=<khoa_bi_mat_ngau_nhien_50_ky_tu>
-```
+**`environment/site.env`** — các giá trị bắt buộc thay thế:
 
-Lệnh sinh `SECRET_KEY` ngẫu nhiên:
+| Biến | Mô tả | Ví dụ |
+|---|---|---|
+| `SECRET_KEY` | Khóa bí mật Django (50+ ký tự) | Sinh bằng lệnh bên dưới |
+| `HOST` | Tên miền chính | `nhamay-abc.com` |
+| `CSRF_TRUSTED_ORIGINS` | URL đầy đủ với scheme | `https://nhamay-abc.com` |
+| `MQTT_PASS` | Mật khẩu MQTT broker | Tự đặt |
+
+Sinh `SECRET_KEY`:
 ```bash
 python3 -c "import secrets; print(secrets.token_urlsafe(50))"
 ```
 
-**Bước 3 — Cập nhật mật khẩu cơ sở dữ liệu:**
+**`environment/mysql.env`** và **`mysql-admin.env`** — đặt mật khẩu database:
 
-File `environment/mysql.env`:
 ```env
-MYSQL_PASSWORD=<mat_khau_moi>
+MYSQL_PASSWORD=MatKhauDB@NhamayABC
+MARIADB_ROOT_PASSWORD=MatKhauRoot@NhamayABC
+MARIADB_PASSWORD=MatKhauDB@NhamayABC
 ```
 
-File `environment/mysql-admin.env`:
-```env
-MARIADB_ROOT_PASSWORD=<mat_khau_root_moi>
-MARIADB_PASSWORD=<mat_khau_moi>
+**`nginx/conf.d/nginx.conf`** — thay tên miền tại 2 vị trí:
+
+```nginx
+server_name nhamay-abc.com;        # ứng dụng chính
+server_name hub.nhamay-abc.com;    # Portainer admin
 ```
 
-### 3.3 Build và khởi động
+### 3.4 Build và khởi động
 
 ```bash
 cd /root/docker
 
-# Build image cơ sở (thực hiện một lần)
+# Build image cơ sở (thực hiện một lần duy nhất)
 docker compose build --no-cache base
 
 # Build các dịch vụ ứng dụng
@@ -152,7 +165,7 @@ docker compose up -d
 docker ps
 ```
 
-> Chờ khoảng 30–60 giây để cơ sở dữ liệu hoàn tất khởi tạo trước khi thực hiện bước tiếp theo.
+> Chờ khoảng 30–60 giây để cơ sở dữ liệu hoàn tất khởi tạo.
 
 ---
 
@@ -173,7 +186,7 @@ docker exec -it vnoj_site python manage.py createsuperuser
 
 ## V. CẤU HÌNH VẬN HÀNH
 
-Đăng nhập tại `https://ten-domain-moi.com/admin/` và thực hiện theo thứ tự:
+Đăng nhập tại `https://nhamay-abc.com/admin/` và thực hiện theo thứ tự:
 
 | Thứ tự | Mục | Nội dung cần cấu hình |
 |---|---|---|
@@ -187,16 +200,24 @@ docker exec -it vnoj_site python manage.py createsuperuser
 
 ## VI. NÂNG CẤP HỆ THỐNG
 
-Khi có phiên bản mã nguồn mới:
+### Cập nhật mã nguồn web app (submodule)
 
 ```bash
 cd /root/docker/repo
 git pull origin dev/sensor-report
+cd ..
 
-# Trường hợp thông thường (thay đổi logic, giao diện)
+# Ghi nhận phiên bản submodule mới vào docker repo
+git add repo && git commit -m "chore: update submodule to latest"
+git push origin master
+
+# Áp dụng trên server
 docker restart vnoj_site
+```
 
-# Trường hợp có thay đổi thư viện (requirements.txt)
+### Trường hợp có thay đổi thư viện Python
+
+```bash
 docker compose build --no-cache base
 docker compose build site mqtt_service
 docker compose up -d --force-recreate site mqtt_service celery_worker celery_beat
@@ -208,11 +229,12 @@ docker compose up -d --force-recreate site mqtt_service celery_worker celery_bea
 
 | Hiện tượng | Nguyên nhân | Biện pháp xử lý |
 |---|---|---|
-| Trang web trả về lỗi 502 | Dịch vụ `vnoj_site` chưa sẵn sàng | Kiểm tra nhật ký: `docker logs vnoj_site --tail=50` |
+| Trang web trả về lỗi 502 | Dịch vụ `vnoj_site` chưa sẵn sàng | `docker logs vnoj_site --tail=50` |
 | Lỗi CSRF verification failed | Tên miền chưa khớp cấu hình | Kiểm tra `CSRF_TRUSTED_ORIGINS` trong `site.env` |
 | Lỗi Error loading MySQLdb | Thiếu thư viện kết nối CSDL | Xác nhận `mysqlclient` trong `requirements.txt` không bị comment |
 | Thiết bị IoT không kết nối | Cổng 1883 bị chặn hoặc sai thông tin xác thực | Kiểm tra tường lửa và thông số MQTT trong `site.env` |
-| Dữ liệu không hiển thị | Chưa thực hiện migrate | Chạy: `docker exec -it vnoj_site python manage.py migrate` |
+| Dữ liệu không hiển thị | Chưa thực hiện migrate | `docker exec -it vnoj_site python manage.py migrate` |
+| Submodule `repo/` rỗng | Chưa clone đệ quy | `git submodule update --init --recursive` |
 
 **Xem nhật ký hệ thống:**
 ```bash
