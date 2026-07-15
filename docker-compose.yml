@@ -1,0 +1,129 @@
+services:
+
+  base:
+    build:
+      context: .
+      dockerfile: ./base/Dockerfile
+    image: vnoj/vnoj-base
+    network_mode: none
+
+  redis:
+    container_name: vnoj_redis
+    image: redis:alpine
+    restart: unless-stopped
+    networks: [site]
+
+  db:
+    container_name: vnoj_mysql
+    image: mariadb
+    restart: unless-stopped
+    volumes:
+      - ./database/:/var/lib/mysql/
+    env_file: [environment/mysql.env, environment/mysql-admin.env]
+    networks: [db]
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mqtt/config:/mosquitto/config
+      - ./mqtt/data:/mosquitto/data
+      - ./mqtt/log:/mosquitto/log
+    environment:
+      - MOSQUITTO_DYNSEC_PASSWORD=${MQTT_PASS}
+    env_file: [environment/site.env]
+    networks: [mqtt_net, nginx]
+
+  site:
+    container_name: vnoj_site
+    build:
+      context: .
+      dockerfile: ./site/Dockerfile
+    image: vnoj/vnoj-site
+    init: true
+    restart: unless-stopped
+    volumes:
+      - cache:/cache/
+      - ./media/:/media/
+      - ./problems/:/problems/
+      - ./repo/:/site/
+    working_dir: /site/
+    env_file: [environment/mysql.env, environment/site.env]
+    networks: [site, nginx, db, mqtt_net]
+    depends_on: [base, db, redis, mosquitto]
+
+  nginx:
+    container_name: vnoj_nginx
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/conf.d/:/etc/nginx/conf.d/
+      - ./repo/staticfiles/:/static/
+      - ./media/:/media/
+    networks: [nginx]
+    depends_on: [site]
+
+  mqtt_service:
+    container_name: vnoj_mqtt_service
+    build:
+      context: .
+      dockerfile: ./mqtt_service/Dockerfile
+    image: vnoj/vnoj-mqtt-service
+    init: true
+    restart: unless-stopped
+    volumes:
+      - ./repo/:/site/
+    working_dir: /site/
+    env_file: [environment/mysql.env, environment/site.env]
+    networks: [site, db, mqtt_net]
+    depends_on: [base, db, redis, mosquitto]
+
+  celery_worker:
+    container_name: vnoj_celery_worker
+    image: vnoj/vnoj-base
+    init: true
+    restart: unless-stopped
+    command: celery -A iot_monitor worker -l info -c 4
+    volumes:
+      - ./repo/:/site/
+    working_dir: /site/
+    env_file: [environment/mysql.env, environment/site.env]
+    networks: [site, db, mqtt_net]
+    depends_on: [base, db, redis, site]
+
+  celery_beat:
+    container_name: vnoj_celery_beat
+    image: vnoj/vnoj-base
+    init: true
+    restart: unless-stopped
+    command: celery -A iot_monitor beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - ./repo/:/site/
+    working_dir: /site/
+    env_file: [environment/mysql.env, environment/site.env]
+    networks: [site, db, mqtt_net]
+    depends_on: [base, db, redis, site]
+  portainer:
+    container_name: vnoj_portainer
+    image: portainer/portainer-ce:2.21.4 # Khuyên dùng version cụ thể thay vì latest để ổn định
+    restart: unless-stopped
+      # ports: 
+      #   - "9000:9000" # Chỉ mở nếu bạn không dùng Nginx/Domain
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./portainer_data:/data
+    networks:
+      - nginx
+networks:
+  site:
+  nginx:
+  db:
+  mqtt_net:
+
+volumes:
+  cache:

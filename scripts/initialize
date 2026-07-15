@@ -1,0 +1,5 @@
+#!/bin/bash
+cd $(dirname $(dirname $0)) || exit
+
+mkdir -p media
+cp config/local_settings.py repo/dmoj/

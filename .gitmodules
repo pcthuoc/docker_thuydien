@@ -1,0 +1,4 @@
+[submodule "repo"]
+	path = repo
+	url = git@github.com:pcthuoc/thuydien.git
+	branch = dev/sensor-report
