@@ -1,4 +1,8 @@
-[submodule "repo"]
-	path = repo
+[submodule "repo/BE"]
+	path = repo/BE
 	url = git@github.com:pcthuoc/thuydien.git
-	branch = dev/sensor-report
+	branch = feat/react-frontend
+[submodule "repo/FE"]
+	path = repo/FE
+	url = git@github.com:pcthuoc/UI_thuydien.git
+	branch = master

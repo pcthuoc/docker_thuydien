@@ -37,6 +37,17 @@ services:
     env_file: [environment/site.env]
     networks: [mqtt_net, nginx]
 
+  frontend:
+    container_name: vnoj_frontend
+    build:
+      context: ./repo/FE
+      dockerfile: Dockerfile
+    image: vnoj/vnoj-frontend
+    restart: unless-stopped
+    expose:
+      - "80"
+    networks: [nginx]
+
   site:
     container_name: vnoj_site
     build:
@@ -49,7 +60,7 @@ services:
       - cache:/cache/
       - ./media/:/media/
       - ./problems/:/problems/
-      - ./repo/:/site/
+      - ./repo/BE/:/site/
     working_dir: /site/
     env_file: [environment/mysql.env, environment/site.env]
     networks: [site, nginx, db, mqtt_net]
@@ -63,10 +74,10 @@ services:
       - "80:80"
     volumes:
       - ./nginx/conf.d/:/etc/nginx/conf.d/
-      - ./repo/staticfiles/:/static/
+      - ./repo/BE/staticfiles/:/static/
       - ./media/:/media/
     networks: [nginx]
-    depends_on: [site]
+    depends_on: [site, frontend]
 
   mqtt_service:
     container_name: vnoj_mqtt_service
@@ -77,7 +88,7 @@ services:
     init: true
     restart: unless-stopped
     volumes:
-      - ./repo/:/site/
+      - ./repo/BE/:/site/
     working_dir: /site/
     env_file: [environment/mysql.env, environment/site.env]
     networks: [site, db, mqtt_net]
@@ -90,7 +101,7 @@ services:
     restart: unless-stopped
     command: celery -A iot_monitor worker -l info -c 4
     volumes:
-      - ./repo/:/site/
+      - ./repo/BE/:/site/
     working_dir: /site/
     env_file: [environment/mysql.env, environment/site.env]
     networks: [site, db, mqtt_net]
@@ -103,7 +114,7 @@ services:
     restart: unless-stopped
     command: celery -A iot_monitor beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
     volumes:
-      - ./repo/:/site/
+      - ./repo/BE/:/site/
     working_dir: /site/
     env_file: [environment/mysql.env, environment/site.env]
     networks: [site, db, mqtt_net]
