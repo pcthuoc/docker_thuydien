@@ -14,9 +14,13 @@ RUN printf 'server {\n\
     server_name _;\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
+    include /etc/nginx/mime.types;\n\
+    types {\n\
+        application/javascript js mjs;\n\
+    }\n\
     gzip on;\n\
     gzip_types text/plain text/css application/javascript application/json image/svg+xml;\n\
-    location ~* \.(?:ico|css|js|gif|jpe?g|png|woff2?|ttf|svg|map|webp)$ {\n\
+    location ~* \.(?:ico|css|js|mjs|gif|jpe?g|png|woff2?|ttf|svg|map|webp)$ {\n\
         expires 30d;\n\
         add_header Cache-Control "public, immutable";\n\
         access_log off;\n\
