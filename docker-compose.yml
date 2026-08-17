@@ -42,6 +42,8 @@ services:
     build:
       context: .
       dockerfile: ./fe/Dockerfile
+      args:
+        VITE_API_MODE: real
     image: vnoj/vnoj-frontend
     restart: unless-stopped
     expose:
@@ -59,7 +61,6 @@ services:
     volumes:
       - cache:/cache/
       - ./media/:/media/
-      - ./problems/:/problems/
       - ./repo/BE/:/site/
     working_dir: /site/
     env_file: [environment/mysql.env, environment/site.env]
