@@ -40,8 +40,8 @@ services:
   frontend:
     container_name: vnoj_frontend
     build:
-      context: ./repo/FE
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./fe/Dockerfile
     image: vnoj/vnoj-frontend
     restart: unless-stopped
     expose:
@@ -52,7 +52,7 @@ services:
     container_name: vnoj_site
     build:
       context: .
-      dockerfile: ./site/Dockerfile
+      dockerfile: ./be/Dockerfile
     image: vnoj/vnoj-site
     init: true
     restart: unless-stopped

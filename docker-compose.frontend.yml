@@ -1,8 +1,8 @@
 services:
   frontend:
     build:
-      context: ./repo/FE
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ./fe/Dockerfile
       args:
         VITE_API_MODE: real
     restart: unless-stopped
